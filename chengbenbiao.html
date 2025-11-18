@@ -1,0 +1,1732 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>成本会计自动制表系统(内部专用)</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+    <script>
+        // 防抖函数：避免输入时频繁触发计算
+        function debounce(fn, delay = 300) {
+            let timer = null;
+            return function(...args) {
+                clearTimeout(timer);
+                timer = setTimeout(() => {
+                    fn.apply(this, args);
+                }, delay);
+            };
+        }
+
+        // Tailwind配置
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        primary: '#1e40af',
+                        secondary: '#3b82f6',
+                        accent: '#93c5fd',
+                        neutral: '#f3f4f6',
+                    },
+                    fontFamily: {
+                        sans: ['Inter', 'system-ui', 'sans-serif'],
+                    },
+                }
+            }
+        };
+    </script>
+    <style type="text/tailwindcss">
+        @layer utilities {
+            .table-shadow {
+                box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+            }
+            .input-focus {
+                @apply focus:border-primary focus:ring-2 focus:ring-primary/20 focus:outline-none;
+            }
+            .tab-active {
+                @apply bg-primary text-white border-primary;
+            }
+            .section-card {
+                @apply bg-white rounded-lg p-6 mb-6 table-shadow transition-all duration-300 hover:shadow-md;
+            }
+            .input-error {
+                @apply border-red-500 focus:border-red-500 focus:ring-red-200;
+            }
+            .btn {
+                @apply px-4 py-2 rounded-lg font-medium transition-all duration-300 cursor-pointer;
+            }
+            .btn-primary {
+                @apply bg-primary text-white hover:bg-primary/90 hover:shadow-md;
+            }
+            .btn-secondary {
+                @apply bg-gray-200 text-gray-800 hover:bg-gray-300;
+            }
+            .form-group {
+                @apply mb-4;
+            }
+            .form-label {
+                @apply block text-sm font-medium text-gray-700 mb-1;
+            }
+            .form-input {
+                @apply w-full px-3 py-2 border border-gray-300 rounded-md input-focus transition-all duration-200;
+            }
+            .section-title {
+                @apply text-xl font-semibold mb-4 text-primary border-b pb-2 flex items-center;
+            }
+            .table-card {
+                @apply section-card overflow-x-auto;
+            }
+            .table-content {
+                display: none;
+                transition: opacity 0.3s ease-in-out;
+                opacity: 0;
+            }
+            .table-content:not(.hidden) {
+                display: block;
+                opacity: 1;
+            }
+            /* 动画效果 */
+            @keyframes fadeIn {
+                from {
+                    opacity: 0;
+                    transform: translateY(10px);
+                }
+                to {
+                    opacity: 1;
+                    transform: translateY(0);
+                }
+            }
+            .animate-fadeIn {
+                animation: fadeIn 0.3s ease-out forwards;
+            }
+        }
+    </style>
+    <style>
+        /* 全局样式 */
+        body {
+            font-family: 'Inter', system-ui, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            color: #1e293b;
+            line-height: 1.6;
+        }
+        /* 页面容器 */
+        .container {
+            max-width: 1200px;
+        }
+        /* 表格样式增强 */
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            background-color: white;
+            border-radius: 0.5rem;
+            overflow: hidden;
+        }
+        table th {
+            background-color: #1e40af;
+            color: white;
+            font-weight: 600;
+            text-align: left;
+            padding: 1rem;
+            border-bottom: 2px solid #3b82f6;
+            transition: background-color 0.3s ease;
+        }
+        table th:hover {
+            background-color: #1e3a8a;
+        }
+        table td {
+            padding: 1rem;
+            border-bottom: 1px solid #e2e8f0;
+            transition: all 0.2s ease;
+        }
+        table tr {
+            transition: all 0.3s ease;
+        }
+        table tr:hover {
+            background-color: #f0f9ff;
+            transform: translateX(5px);
+        }
+        table tr:hover td {
+            border-color: #93c5fd;
+        }
+        /* 标签页样式增强 */
+        .tab {
+            cursor: pointer;
+            transition: all 0.3s ease;
+            border: 1px solid #e2e8f0;
+            margin-right: 0.25rem;
+        }
+        .tab:not(.tab-active):hover {
+            background-color: #f1f5f9;
+        }
+        /* 输入框样式增强 */
+        input[type="number"] {
+            -moz-appearance: textfield;
+        }
+        input[type="number"]::-webkit-inner-spin-button,
+        input[type="number"]::-webkit-outer-spin-button {
+            -webkit-appearance: none;
+            margin: 0;
+        }
+        /* 动画效果 */
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(10px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+        .fade-in {
+            animation: fadeIn 0.5s ease-out;
+        }
+        /* 按钮动画 */
+        .btn:active {
+            transform: translateY(1px);
+        }
+        /* 滚动条样式 */
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #f1f1f1;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #888;
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #555;
+        }
+    </style>
+</head>
+<body class="bg-gray-50 font-sans text-gray-800">
+    <div class="container mx-auto px-4 py-8 max-w-7xl">
+        <!-- 页面标题 -->
+        <header class="mb-8 text-center">
+            <h1 class="text-[clamp(1.8rem,3vw,2.5rem)] font-bold text-primary mb-2">成本会计自动制表系统</h1>
+            <p class="text-gray-600">输入基础数据，实时生成完整成本核算表格</p>
+        </header>
+
+        <!-- 主要内容区 -->
+        <div class="flex flex-col lg:flex-row gap-6">
+            <!-- 数据录入区 -->
+            <div class="lg:w-1/3">
+                <div class="section-card sticky top-4">
+                    <h2 class="text-xl font-semibold mb-4 text-primary border-b pb-2">基础数据录入</h2>
+                    
+                    <!-- 标签页切换 -->
+                    <div class="flex border-b mb-4 overflow-x-auto">
+                        <button id="tab1" class="tab-active px-4 py-2 border rounded-t-lg mr-1 whitespace-nowrap">产品基础信息</button>
+                        <button id="tab2" class="px-4 py-2 border rounded-t-lg mr-1 whitespace-nowrap bg-gray-100 text-gray-600">费用数据</button>
+                        <button id="tab3" class="px-4 py-2 border rounded-t-lg whitespace-nowrap bg-gray-100 text-gray-600">生产工时信息</button>
+                    </div>
+
+                    <!-- 标签页内容 -->
+                    <div id="tab1Content" class="tab-content fade-in">
+                        <h3 class="font-medium text-lg mb-3 text-gray-800 flex items-center">
+                            <span class="w-2 h-2 bg-primary rounded-full mr-2"></span>
+                            甲产品信息
+                        </h3>
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+                            <div class="form-group">
+                                <label class="form-label">月初在产品数量(件)</label>
+                                <input type="number" id="jpBeginQty" value="500" min="0" class="form-input">
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">本月完工数量(件)</label>
+                                <input type="number" id="jpFinishQty" value="2000" min="0" class="form-input">
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">月末在产品数量(件)</label>
+                                <input type="number" id="jpEndQty" value="500" min="0" class="form-input">
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">材料单位定额(kg)</label>
+                                <input type="number" id="jpMatQuota" value="5" min="0" step="0.01" class="form-input">
+                            </div>
+                        </div>
+
+                        <h3 class="font-medium text-lg mb-3">乙产品信息</h3>
+                        <div class="grid grid-cols-2 gap-3 mb-4">
+                            <div>
+                                <label class="block text-sm font-medium mb-1">本月完工数量(件)</label>
+                                <input type="number" id="ypFinishQty" value="500" min="0" class="w-full px-3 py-2 border rounded input-focus">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium mb-1">材料单位定额(kg)</label>
+                                <input type="number" id="ypMatQuota" value="6" min="0" step="0.01" class="w-full px-3 py-2 border rounded input-focus">
+                            </div>
+                        </div>
+
+                        <h3 class="font-medium text-lg mb-3">月初在产品成本(甲产品)</h3>
+                        <div class="grid grid-cols-3 gap-3">
+                            <div>
+                                <label class="block text-sm font-medium mb-1">直接材料(元)</label>
+                                <input type="number" id="jpBeginMat" value="24000" min="0" class="w-full px-3 py-2 border rounded input-focus">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium mb-1">直接人工(元)</label>
+                                <input type="number" id="jpBeginLab" value="16250" min="0" class="w-full px-3 py-2 border rounded input-focus">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium mb-1">制造费用(元)</label>
+                                <input type="number" id="jpBeginMfg" value="10300" min="0" class="w-full px-3 py-2 border rounded input-focus">
+                            </div>
+                        </div>
+                    </div>
+
+                    <div id="tab2Content" class="tab-content hidden">
+                        <h3 class="font-medium text-lg mb-3">材料费用(元)</h3>
+                        <div class="grid grid-cols-2 gap-3 mb-4">
+                            <div>
+                                <label class="block text-sm font-medium mb-1">甲产品直接领用</label>
+                                <input type="number" id="jpMatDirect" value="31000" min="0" class="w-full px-3 py-2 border rounded input-focus">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium mb-1">乙产品直接领用</label>
+                                <input type="number" id="ypMatDirect" value="23000" min="0" class="w-full px-3 py-2 border rounded input-focus">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium mb-1">甲乙共同耗用</label>
+                                <input type="number" id="matCommon" value="26000" min="0" class="w-full px-3 py-2 border rounded input-focus">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium mb-1">基本生产车间领用</label>
+                                <input type="number" id="workshopMat" value="6000" min="0" class="w-full px-3 py-2 border rounded input-focus">
+                            </div>
+                        </div>
+
+                        <h3 class="font-medium text-lg mb-3">职工薪酬(元)</h3>
+                        <div class="grid grid-cols-2 gap-3 mb-4">
+                            <div>
+                                <label class="block text-sm font-medium mb-1">生产工人薪酬</label>
+                                <input type="number" id="prodWorkerSal" value="220000" min="0" class="w-full px-3 py-2 border rounded input-focus">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium mb-1">供电车间人员薪酬</label>
+                                <input type="number" id="powerSal" value="14000" min="0" class="w-full px-3 py-2 border rounded input-focus">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium mb-1">供水车间人员薪酬</label>
+                                <input type="number" id="waterSal" value="16000" min="0" class="w-full px-3 py-2 border rounded input-focus">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium mb-1">厂部管理人员薪酬</label>
+                                <input type="number" id="adminSal" value="26000" min="0" class="w-full px-3 py-2 border rounded input-focus">
+                            </div>
+                        </div>
+
+                        <h3 class="font-medium text-lg mb-3">折旧费用(元)</h3>
+                        <div class="grid grid-cols-2 gap-3">
+                            <div>
+                                <label class="block text-sm font-medium mb-1">基本生产车间</label>
+                                <input type="number" id="workshopDepr" value="26122" min="0" class="w-full px-3 py-2 border rounded input-focus">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium mb-1">供电车间</label>
+                                <input type="number" id="powerDepr" value="5000" min="0" class="w-full px-3 py-2 border rounded input-focus">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium mb-1">供水车间</label>
+                                <input type="number" id="waterDepr" value="2000" min="0" class="w-full px-3 py-2 border rounded input-focus">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium mb-1">厂部管理部门</label>
+                                <input type="number" id="adminDepr" value="8500" min="0" class="w-full px-3 py-2 border rounded input-focus">
+                            </div>
+                        </div>
+                    </div>
+
+                    <div id="tab3Content" class="tab-content hidden">
+                        <h3 class="font-medium text-lg mb-3">生产工时(小时)</h3>
+                        <div class="grid grid-cols-2 gap-3 mb-4">
+                            <div>
+                                <label class="block text-sm font-medium mb-1">甲产品实际工时</label>
+                                <input type="number" id="jpWorkHour" value="52000" min="0" class="w-full px-3 py-2 border rounded input-focus">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium mb-1">乙产品实际工时</label>
+                                <input type="number" id="ypWorkHour" value="36000" min="0" class="w-full px-3 py-2 border rounded input-focus">
+                            </div>
+                        </div>
+
+                        <h3 class="font-medium text-lg mb-3">辅助生产车间供应量</h3>
+                        <div class="grid grid-cols-2 gap-3 mb-4">
+                            <div>
+                                <label class="block text-sm font-medium mb-1">供电车间(度)</label>
+                                <input type="number" id="powerSupply" value="43500" min="0" class="w-full px-3 py-2 border rounded input-focus">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium mb-1">供水车间(升)</label>
+                                <input type="number" id="waterSupply" value="21500" min="0" class="w-full px-3 py-2 border rounded input-focus">
+                            </div>
+                        </div>
+
+                        <h3 class="font-medium text-lg mb-3">产品耗用辅助生产</h3>
+                        <div class="grid grid-cols-2 gap-3">
+                            <div>
+                                <label class="block text-sm font-medium mb-1">甲产品耗电(度)</label>
+                                <input type="number" id="jpPowerUse" value="20500" min="0" class="w-full px-3 py-2 border rounded input-focus">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium mb-1">甲产品耗水(升)</label>
+                                <input type="number" id="jpWaterUse" value="9000" min="0" class="w-full px-3 py-2 border rounded input-focus">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium mb-1">乙产品耗电(度)</label>
+                                <input type="number" id="ypPowerUse" value="18500" min="0" class="w-full px-3 py-2 border rounded input-focus">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium mb-1">乙产品耗水(升)</label>
+                                <input type="number" id="ypWaterUse" value="5000" min="0" class="w-full px-3 py-2 border rounded input-focus">
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 操作按钮 -->
+                    <div class="mt-6 flex gap-3">
+                        <button id="generateBtn" class="flex-1 btn btn-primary">
+                            刷新数据
+                        </button>
+                        <button id="exportBtn" class="flex-1 btn bg-green-600 hover:bg-green-700 text-white font-medium px-6 py-3 rounded-lg transition duration-300 shadow-md">
+                            导出Excel
+                        </button>
+                    </div>
+
+                    <!-- 计算日志 -->
+                    <div class="mt-4 p-3 bg-gray-50 rounded border">
+                        <h4 class="font-medium text-sm text-gray-700 mb-2">计算状态</h4>
+                        <p id="calcLog" class="text-sm text-gray-600">数据已就绪，可开始编辑</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 表格展示区 -->
+            <div class="lg:w-2/3">
+                <div class="section-card">
+                    <h2 class="text-xl font-semibold mb-4 text-primary border-b pb-2">成本核算表格</h2>
+                    
+                    <!-- 表格切换标签 -->
+                    <div class="flex flex-wrap gap-2 mb-4 overflow-x-auto pb-2">
+                        <button class="table-tab bg-gray-200 text-gray-700 px-4 py-2 rounded-lg transition-all duration-300 hover:bg-gray-300 shadow-sm" data-table="matDistTable">材料费用分配表</button>
+                        <button class="table-tab bg-gray-200 text-gray-700 px-4 py-2 rounded-lg transition-all duration-300 hover:bg-gray-300 shadow-sm" data-table="salDistTable">职工薪酬分配表</button>
+                        <button class="table-tab bg-gray-200 text-gray-700 px-4 py-2 rounded-lg transition-all duration-300 hover:bg-gray-300 shadow-sm" data-table="auxCostTable">辅助生产成本明细账</button>
+                        <button class="table-tab bg-gray-200 text-gray-700 px-4 py-2 rounded-lg transition-all duration-300 hover:bg-gray-300 shadow-sm" data-table="auxDistTable">辅助生产费用分配表</button>
+                        <button class="table-tab bg-gray-200 text-gray-700 px-4 py-2 rounded-lg transition-all duration-300 hover:bg-gray-300 shadow-sm" data-table="mfgCostTable">制造费用明细账</button>
+                        <button class="table-tab bg-gray-200 text-gray-700 px-4 py-2 rounded-lg transition-all duration-300 hover:bg-gray-300 shadow-sm" data-table="mfgDistTable">制造费用分配表</button>
+                        <button class="table-tab bg-gray-200 text-gray-700 px-4 py-2 rounded-lg transition-all duration-300 hover:bg-gray-300 shadow-sm" data-table="prodCostTable">产品成本计算单</button>
+                        <button class="table-tab bg-gray-200 text-gray-700 px-4 py-2 rounded-lg transition-all duration-300 hover:bg-gray-300 shadow-sm" data-table="finishCostTable">完工产品成本汇总表</button>
+                    </div>
+
+                    <!-- 表格容器 -->
+                    <div class="table-card">
+                        <!-- 材料费用分配表 -->
+                        <div id="matDistTable" class="table-content">
+                            <h3 class="font-medium text-lg mb-3 text-center">材料费用分配表</h3>
+                            <table class="w-full border-collapse">
+                                <thead>
+                                    <tr class="bg-primary text-white">
+                                        <th class="px-4 py-3 text-left font-semibold">项目</th>
+                                        <th class="px-4 py-3 text-right font-semibold">直接计入(元)</th>
+                                        <th class="px-4 py-3 text-right font-semibold">分配标准(kg)</th>
+                                        <th class="px-4 py-3 text-right font-semibold">分配率</th>
+                                        <th class="px-4 py-3 text-right font-semibold">分配计入(元)</th>
+                                        <th class="px-4 py-3 text-right font-semibold">合计(元)</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="matDistBody">
+                                    <!-- 由JS动态填充 -->
+                                </tbody>
+                            </table>
+                        </div>
+
+                        <!-- 职工薪酬分配表 -->
+                        <div id="salDistTable" class="table-content hidden">
+                            <h3 class="font-medium text-lg mb-3 text-center">职工薪酬分配表</h3>
+                            <table class="w-full border-collapse mb-6">
+                                <thead>
+                                    <tr class="bg-primary text-white">
+                                        <th class="border px-3 py-2 text-left">项目</th>
+                                        <th class="border px-3 py-2 text-right">分配标准(工时)</th>
+                                        <th class="border px-3 py-2 text-right">分配率</th>
+                                        <th class="border px-3 py-2 text-right">分配额(元)</th>
+                                        <th class="border px-3 py-2 text-right">合计(元)</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="salDistBody">
+                                    <!-- 由JS动态填充 -->
+                                </tbody>
+                            </table>
+                        </div>
+
+                        <!-- 辅助生产成本明细账 -->
+                        <div id="auxCostTable" class="table-content hidden">
+                            <div class="grid grid-cols-1 gap-8">
+                                <div class="p-4 bg-white rounded-lg shadow-sm">
+                                    <h3 class="font-medium text-lg mb-4 text-center">辅助生产成本明细账(供电车间)</h3>
+                                    <table class="w-full border-collapse">
+                                        <thead>
+                                            <tr class="bg-primary text-white">
+                                                <th class="border px-4 py-3 text-left">摘要</th>
+                                                <th class="border px-4 py-3 text-right">直接材料(元)</th>
+                                                <th class="border px-4 py-3 text-right">直接人工(元)</th>
+                                                <th class="border px-4 py-3 text-right">折旧费用(元)</th>
+                                                <th class="border px-4 py-3 text-right">其他费用(元)</th>
+                                                <th class="border px-4 py-3 text-right">合计(元)</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="powerCostBody">
+                                            <!-- 由JS动态填充 -->
+                                        </tbody>
+                                    </table>
+                                </div>
+                                <div class="p-4 bg-white rounded-lg shadow-sm">
+                                    <h3 class="font-medium text-lg mb-4 text-center">辅助生产成本明细账(供水车间)</h3>
+                                    <table class="w-full border-collapse">
+                                        <thead>
+                                            <tr class="bg-primary text-white">
+                                                <th class="border px-4 py-3 text-left">摘要</th>
+                                                <th class="border px-4 py-3 text-right">直接材料(元)</th>
+                                                <th class="border px-4 py-3 text-right">直接人工(元)</th>
+                                                <th class="border px-4 py-3 text-right">折旧费用(元)</th>
+                                                <th class="border px-4 py-3 text-right">其他费用(元)</th>
+                                                <th class="border px-4 py-3 text-right">合计(元)</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="waterCostBody">
+                                            <!-- 由JS动态填充 -->
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- 辅助生产费用分配表 -->
+                        <div id="auxDistTable" class="table-content hidden">
+                            <h3 class="font-medium text-lg mb-3 text-center">辅助生产费用分配表(直接分配法)</h3>
+                            <table class="w-full border-collapse mb-6">
+                                <thead>
+                                    <tr class="bg-primary text-white">
+                                        <th class="border px-3 py-2 text-left">项目</th>
+                                        <th class="border px-3 py-2 text-right">供电(度)</th>
+                                        <th class="border px-3 py-2 text-right">金额(元)</th>
+                                        <th class="border px-3 py-2 text-right">供水(升)</th>
+                                        <th class="border px-3 py-2 text-right">金额(元)</th>
+                                        <th class="border px-3 py-2 text-right">小计(元)</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="auxDistBody">
+                                    <!-- 由JS动态填充 -->
+                                </tbody>
+                            </table>
+                        </div>
+
+                        <!-- 制造费用明细账 -->
+                        <div id="mfgCostTable" class="table-content hidden">
+                            <h3 class="font-medium text-lg mb-3 text-center">制造费用明细账</h3>
+                            <table class="w-full border-collapse mb-6">
+                                <thead>
+                                    <tr class="bg-primary text-white">
+                                        <th class="border px-3 py-2 text-left">摘要</th>
+                                        <th class="border px-3 py-2 text-right">消耗材料(元)</th>
+                                        <th class="border px-3 py-2 text-right">工资及福利费(元)</th>
+                                        <th class="border px-3 py-2 text-right">折旧费用(元)</th>
+                                        <th class="border px-3 py-2 text-right">办公差旅费(元)</th>
+                                        <th class="border px-3 py-2 text-right">供电、供水费(元)</th>
+                                        <th class="border px-3 py-2 text-right">合计(元)</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="mfgCostBody">
+                                    <!-- 由JS动态填充 -->
+                                </tbody>
+                            </table>
+                        </div>
+
+                        <!-- 制造费用分配表 -->
+                        <div id="mfgDistTable" class="table-content hidden">
+                            <h3 class="font-medium text-lg mb-3 text-center">制造费用分配表</h3>
+                            <table class="w-full border-collapse mb-6">
+                                <thead>
+                                    <tr class="bg-primary text-white">
+                                        <th class="border px-3 py-2 text-left">分配对象</th>
+                                        <th class="border px-3 py-2 text-right">分配标准(工时)</th>
+                                        <th class="border px-3 py-2 text-right">分配率</th>
+                                        <th class="border px-3 py-2 text-right">分配金额(元)</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="mfgDistBody">
+                                    <!-- 由JS动态填充 -->
+                                </tbody>
+                            </table>
+                        </div>
+
+                        <!-- 产品成本计算单 -->
+                        <div id="prodCostTable" class="table-content hidden">
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                <div>
+                                    <h3 class="font-medium text-lg mb-3 text-center">产品成本计算单(甲产品)</h3>
+                                    <table class="w-full border-collapse">
+                                        <thead>
+                                            <tr class="bg-primary text-white">
+                                                <th class="border px-3 py-2 text-left">摘要</th>
+                                                <th class="border px-3 py-2 text-right">直接材料(元)</th>
+                                                <th class="border px-3 py-2 text-right">直接人工(元)</th>
+                                                <th class="border px-3 py-2 text-right">制造费用(元)</th>
+                                                <th class="border px-3 py-2 text-right">合计(元)</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="jpCostBody">
+                                            <!-- 由JS动态填充 -->
+                                        </tbody>
+                                    </table>
+                                </div>
+                                <div>
+                                    <h3 class="font-medium text-lg mb-3 text-center">产品成本计算单(乙产品)</h3>
+                                    <table class="w-full border-collapse">
+                                        <thead>
+                                            <tr class="bg-primary text-white">
+                                                <th class="border px-3 py-2 text-left">摘要</th>
+                                                <th class="border px-3 py-2 text-right">直接材料(元)</th>
+                                                <th class="border px-3 py-2 text-right">直接人工(元)</th>
+                                                <th class="border px-3 py-2 text-right">制造费用(元)</th>
+                                                <th class="border px-3 py-2 text-right">合计(元)</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="ypCostBody">
+                                            <!-- 由JS动态填充 -->
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- 完工产品成本汇总表 -->
+                        <div id="finishCostTable" class="table-content hidden">
+                            <h3 class="font-medium text-lg mb-3 text-center">完工产品成本汇总表</h3>
+                            <table class="w-full border-collapse mb-6">
+                                <thead>
+                                    <tr class="bg-primary text-white">
+                                        <th class="border px-3 py-2 text-left">产品名称</th>
+                                        <th class="border px-3 py-2 text-right">产量(件)</th>
+                                        <th class="border px-3 py-2 text-right">直接材料(元)</th>
+                                        <th class="border px-3 py-2 text-right">直接人工(元)</th>
+                                        <th class="border px-3 py-2 text-right">制造费用(元)</th>
+                                        <th class="border px-3 py-2 text-right">成本合计(元)</th>
+                                        <th class="border px-3 py-2 text-right">单位成本(元)</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="finishCostBody">
+                                    <!-- 由JS动态填充 -->
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 页脚 -->
+        <footer class="mt-12 text-center text-gray-600 text-sm">
+            <p>© 2025 成本会计自动制表系统 | 数据计算仅供参考，请结合实际业务核对</p>
+        </footer>
+    </div>
+
+    <script>
+        // 全局数据存储
+        let globalData = {
+            // 产品基础信息
+            jpBeginQty: 500,
+            jpFinishQty: 2000,
+            jpEndQty: 500,
+            jpMatQuota: 5,
+            ypFinishQty: 500,
+            ypMatQuota: 6,
+            
+            // 月初在产品成本
+            jpBeginMat: 24000,
+            jpBeginLab: 16250,
+            jpBeginMfg: 10300,
+            
+            // 材料费用
+            jpMatDirect: 31000,
+            ypMatDirect: 23000,
+            matCommon: 26000,
+            workshopMat: 6000,
+            
+            // 职工薪酬
+            prodWorkerSal: 220000,
+            powerSal: 14000,
+            waterSal: 16000,
+            adminSal: 26000,
+            
+            // 折旧费用
+            workshopDepr: 26122,
+            powerDepr: 5000,
+            waterDepr: 2000,
+            adminDepr: 8500,
+            
+            // 生产工时
+            jpWorkHour: 52000,
+            ypWorkHour: 36000,
+            
+            // 辅助生产
+            powerSupply: 43500,
+            waterSupply: 21500,
+            jpPowerUse: 20500,
+            jpWaterUse: 9000,
+            ypPowerUse: 18500,
+            ypWaterUse: 5000,
+            
+            // 其他固定数据
+            powerMat: 788,          // 供电车间材料费用
+            waterMat: 800,          // 供水车间材料费用
+            adminMat: 500,          // 厂部管理部门材料费用
+            workshopStaffSal: 12000,// 基本生产车间人员薪酬
+            powerOther: 1662,       // 供电车间其他费用
+            waterOther: 1450,       // 供水车间其他费用
+            workshopOther: 4600,    // 基本生产车间其他费用
+            adminOther: 10400       // 厂部管理部门其他费用
+        };
+
+        // 页面加载完成后初始化
+        document.addEventListener('DOMContentLoaded', function() {
+            // 绑定输入框事件
+            bindInputEvents();
+            
+            // 初始化表格数据
+            updateAllDataAndTables();
+            
+            // 初始化材料费用分配表为激活状态
+            const matDistTab = document.querySelector('[data-table="matDistTable"]');
+            if (matDistTab) {
+                matDistTab.classList.add('bg-secondary', 'text-white');
+                matDistTab.classList.remove('bg-gray-200', 'text-gray-700');
+            }
+            
+            // 标签页切换功能
+            document.getElementById('tab1').addEventListener('click', function() {
+                switchTab(1);
+            });
+            document.getElementById('tab2').addEventListener('click', function() {
+                switchTab(2);
+            });
+            document.getElementById('tab3').addEventListener('click', function() {
+                switchTab(3);
+            });
+
+            // 表格切换功能
+            document.querySelectorAll('.table-tab').forEach(tab => {
+                tab.addEventListener('click', function() {
+                    const tableId = this.getAttribute('data-table');
+                    
+                    // 重置所有表格标签
+                    document.querySelectorAll('.table-tab').forEach(t => {
+                        t.classList.remove('bg-secondary', 'text-white');
+                        t.classList.add('bg-gray-200', 'text-gray-700');
+                    });
+                    
+                    // 隐藏所有表格内容并添加淡出效果
+                    document.querySelectorAll('.table-content').forEach(content => {
+                        content.classList.add('opacity-0');
+                        setTimeout(() => {
+                            content.classList.add('hidden');
+                        }, 200);
+                    });
+                    
+                    // 激活选中表格标签
+                    this.classList.add('bg-secondary', 'text-white');
+                    this.classList.remove('bg-gray-200', 'text-gray-700');
+                    
+                    // 显示选中表格并添加淡入效果
+                    const selectedTable = document.getElementById(tableId);
+                    selectedTable.classList.remove('hidden');
+                    setTimeout(() => {
+                        selectedTable.classList.remove('opacity-0');
+                    }, 50);
+                    
+                    // 直接更新数据
+                    updateAllDataAndTables();
+                });
+            });
+
+            // 生成按钮事件
+            document.getElementById('generateBtn').addEventListener('click', function() {
+                // 添加点击动画
+                this.style.transform = 'scale(0.95)';
+                this.style.opacity = '0.9';
+                
+                updateAllDataAndTables();
+                showNotification('数据已更新');
+                
+                // 恢复按钮状态
+                setTimeout(() => {
+                    this.style.transform = 'scale(1)';
+                    this.style.opacity = '1';
+                }, 200);
+            });
+
+            // 导出Excel按钮事件
+            document.getElementById('exportBtn').addEventListener('click', function() {
+                // 添加点击动画
+                this.style.transform = 'scale(0.95)';
+                this.style.opacity = '0.9';
+                
+                exportToExcel();
+                showNotification('正在导出Excel文件');
+                
+                // 恢复按钮状态
+                setTimeout(() => {
+                    this.style.transform = 'scale(1)';
+                    this.style.opacity = '1';
+                }, 200);
+            });
+            
+            // 为所有按钮添加悬停和点击效果
+            document.querySelectorAll('.btn').forEach(btn => {
+                btn.addEventListener('mouseenter', function() {
+                    this.classList.add('shadow-md');
+                });
+                
+                btn.addEventListener('mouseleave', function() {
+                    this.classList.remove('shadow-md');
+                });
+            });
+        });
+
+        // 绑定输入框事件
+        function bindInputEvents() {
+            // 获取所有输入框
+            const allInputs = document.querySelectorAll('input[type="number"]');
+            
+            // 为每个输入框绑定事件
+            allInputs.forEach(input => {
+                const dataKey = input.id;
+                if (!dataKey) return;
+
+                // 添加输入反馈效果
+                input.addEventListener('input', function() {
+                    // 添加输入中视觉反馈
+                    this.classList.add('ring-2', 'ring-primary/50', 'shadow-sm');
+                    
+                    // 300ms后移除反馈效果
+                    setTimeout(() => {
+                        this.classList.remove('ring-2', 'ring-primary/50', 'shadow-sm');
+                    }, 300);
+                });
+
+                // 添加聚焦和失焦效果
+                input.addEventListener('focus', function() {
+                    this.classList.add('ring-2', 'ring-primary/70', 'shadow-md');
+                });
+                
+                input.addEventListener('blur', function() {
+                    this.classList.remove('ring-2', 'ring-primary/70', 'shadow-md');
+                });
+
+                // 绑定input事件，使用防抖
+                input.addEventListener('input', debounce(function(e) {
+                    // 验证输入值
+                    const value = parseFloat(e.target.value) || 0;
+                    if (value < 0) {
+                        e.target.classList.add('input-error');
+                        document.getElementById('calcLog').textContent = `错误：${e.target.previousElementSibling.textContent}不能为负数`;
+                        return;
+                    } else {
+                        e.target.classList.remove('input-error');
+                        // 显示计算日志
+                        document.getElementById('calcLog').textContent = '正在实时计算...';
+                    }
+
+                    // 更新全局数据
+                    globalData[dataKey] = value;
+                    
+                    // 实时计算和更新表格
+                    updateAllDataAndTables();
+                    
+                    // 更新计算日志
+                    document.getElementById('calcLog').textContent = '计算完成';
+                }));
+            });
+        }
+
+        // 切换标签页
+        function switchTab(tabIndex) {
+            // 重置所有标签
+            document.querySelectorAll('[id^="tab"]').forEach(tab => {
+                tab.classList.remove('tab-active');
+                tab.classList.add('bg-gray-100', 'text-gray-600');
+            });
+            document.querySelectorAll('.tab-content').forEach(content => {
+                content.classList.add('hidden');
+            });
+
+            // 激活选中标签
+            document.getElementById(`tab${tabIndex}`).classList.add('tab-active');
+            document.getElementById(`tab${tabIndex}`).classList.remove('bg-gray-100', 'text-gray-600');
+            document.getElementById(`tab${tabIndex}Content`).classList.remove('hidden');
+        }
+
+        // 更新所有数据和表格
+        function updateAllDataAndTables() {
+            try {
+                // 计算数据
+                calculateData(globalData);
+                
+                // 填充表格
+                fillMaterialDistributionTable(globalData);
+                fillSalaryDistributionTable(globalData);
+                fillAuxiliaryCostTable(globalData);
+                fillAuxiliaryDistributionTable(globalData);
+                fillManufacturingCostTable(globalData);
+                fillManufacturingDistributionTable(globalData);
+                fillProductCostTable(globalData);
+                fillFinishCostTable(globalData);
+                
+                // 更新计算日志
+                document.getElementById('calcLog').textContent = 
+                    `材料分配率：${globalData.matDistRate.toFixed(2)} | 制造费用分配率：${globalData.mfgDistRate.toFixed(2)}`;
+                
+                // 保持当前激活的表格可见
+                const activeTableTab = document.querySelector('.table-tab.bg-secondary');
+                if (activeTableTab) {
+                    const activeTableId = activeTableTab.getAttribute('data-table');
+                    document.getElementById(activeTableId).classList.remove('hidden');
+                }
+            } catch (error) {
+                document.getElementById('calcLog').textContent = `计算错误：${error.message}`;
+                console.error('计算错误:', error);
+            }
+        }
+
+        // 数据计算逻辑
+        function calculateData(data) {
+            // 1. 材料费用分配计算
+            data.jpMatQuotaTotal = data.jpFinishQty * data.jpMatQuota + data.jpEndQty * data.jpMatQuota;
+            data.ypMatQuotaTotal = data.ypFinishQty * data.ypMatQuota;
+            
+            // 防止除数为0
+            const totalMatQuota = data.jpMatQuotaTotal + data.ypMatQuotaTotal;
+            data.matDistRate = totalMatQuota > 0 ? data.matCommon / totalMatQuota : 0;
+            
+            data.jpMatCommon = Math.round(data.jpMatQuotaTotal * data.matDistRate);
+            data.ypMatCommon = Math.round(data.ypMatQuotaTotal * data.matDistRate);
+            data.jpMatTotal = data.jpMatDirect + data.jpMatCommon;
+            data.ypMatTotal = data.ypMatDirect + data.ypMatCommon;
+            
+            // 2. 职工薪酬分配计算
+            data.totalWorkHour = data.jpWorkHour + data.ypWorkHour;
+            data.salDistRate = data.totalWorkHour > 0 ? data.prodWorkerSal / data.totalWorkHour : 0;
+            data.jpSal = Math.round(data.jpWorkHour * data.salDistRate);
+            data.ypSal = Math.round(data.ypWorkHour * data.salDistRate);
+            
+            // 3. 辅助生产费用计算
+            // 供电车间总成本
+            data.powerTotalCost = data.powerMat + data.powerSal + data.powerDepr + data.powerOther;
+            // 供水车间总成本
+            data.waterTotalCost = data.waterMat + data.waterSal + data.waterDepr + data.waterOther;
+            
+            // 直接分配法分配率（扣除相互耗用）
+            const netPowerSupply = data.powerSupply - 1000; // 扣除供水车间耗用1000度
+            const netWaterSupply = data.waterSupply - 800; // 扣除供电车间耗用800升
+            data.powerDistRate = netPowerSupply > 0 ? data.powerTotalCost / netPowerSupply : 0;
+            data.waterDistRate = netWaterSupply > 0 ? data.waterTotalCost / netWaterSupply : 0;
+            
+            // 供电费用分配
+            data.jpPowerCost = Math.round(data.jpPowerUse * data.powerDistRate);
+            data.ypPowerCost = Math.round(data.ypPowerUse * data.powerDistRate);
+            data.workshopPowerCost = Math.round(2300 * data.powerDistRate);
+            data.adminPowerCost = Math.round(1200 * data.powerDistRate);
+            
+            // 供水费用分配
+            data.jpWaterCost = Math.round(data.jpWaterUse * data.waterDistRate);
+            data.ypWaterCost = Math.round(data.ypWaterUse * data.waterDistRate);
+            data.workshopWaterCost = Math.round(3900 * data.waterDistRate);
+            data.adminWaterCost = Math.round(2800 * data.waterDistRate);
+            
+            // 产品辅助生产费用合计
+            data.jpAuxTotal = data.jpPowerCost + data.jpWaterCost;
+            data.ypAuxTotal = data.ypPowerCost + data.ypWaterCost;
+            
+            // 4. 制造费用计算
+            data.mfgMaterial = data.workshopMat;
+            data.mfgSal = 12000;
+            data.mfgDepr = data.workshopDepr;
+            data.mfgOther = 4600;
+            data.mfgAux = data.workshopPowerCost + data.workshopWaterCost;
+            data.mfgTotal = data.mfgMaterial + data.mfgSal + data.mfgDepr + data.mfgOther + data.mfgAux;
+            
+            // 制造费用分配率
+            data.mfgDistRate = data.totalWorkHour > 0 ? data.mfgTotal / data.totalWorkHour : 0;
+            data.jpMfg = Math.round(data.jpWorkHour * data.mfgDistRate);
+            data.ypMfg = Math.round(data.ypWorkHour * data.mfgDistRate);
+            
+            // 5. 甲产品约当产量计算
+            // 材料费用约当产量（一次投入）
+            data.jpMatEquivQty = data.jpFinishQty + data.jpEndQty;
+            // 加工费用约当产量（假设在产品完工程度50%）
+            data.jpProcessEquivQty = data.jpFinishQty + Math.round(data.jpEndQty * 0.5);
+            
+            // 6. 甲产品成本计算
+            // 直接材料
+            data.jpMatBeginTotal = data.jpBeginMat + data.jpMatTotal;
+            data.jpMatUnitCost = data.jpMatEquivQty > 0 ? data.jpMatBeginTotal / data.jpMatEquivQty : 0;
+            data.jpMatFinish = Math.round(data.jpFinishQty * data.jpMatUnitCost);
+            data.jpMatEnd = Math.round(data.jpEndQty * data.jpMatUnitCost);
+            
+            // 直接人工
+            data.jpLabBeginTotal = data.jpBeginLab + data.jpSal + data.jpAuxTotal;
+            data.jpLabUnitCost = data.jpProcessEquivQty > 0 ? data.jpLabBeginTotal / data.jpProcessEquivQty : 0;
+            data.jpLabFinish = Math.round(data.jpFinishQty * data.jpLabUnitCost);
+            data.jpLabEnd = Math.round((data.jpProcessEquivQty - data.jpFinishQty) * data.jpLabUnitCost);
+            
+            // 制造费用
+            data.jpMfgBeginTotal = data.jpBeginMfg + data.jpMfg;
+            data.jpMfgUnitCost = data.jpProcessEquivQty > 0 ? data.jpMfgBeginTotal / data.jpProcessEquivQty : 0;
+            data.jpMfgFinish = Math.round(data.jpFinishQty * data.jpMfgUnitCost);
+            data.jpMfgEnd = Math.round((data.jpProcessEquivQty - data.jpFinishQty) * data.jpMfgUnitCost);
+            
+            // 甲产品总成本
+            data.jpFinishTotal = data.jpMatFinish + data.jpLabFinish + data.jpMfgFinish;
+            data.jpEndTotal = data.jpMatEnd + data.jpLabEnd + data.jpMfgEnd;
+            data.jpUnitCost = data.jpFinishQty > 0 ? data.jpFinishTotal / data.jpFinishQty : 0;
+            
+            // 7. 乙产品成本计算（无在产品）
+            data.ypMatFinish = data.ypMatTotal;
+            data.ypLabFinish = data.ypSal + data.ypAuxTotal;
+            data.ypMfgFinish = data.ypMfg;
+            data.ypFinishTotal = data.ypMatFinish + data.ypLabFinish + data.ypMfgFinish;
+            data.ypUnitCost = data.ypFinishQty > 0 ? data.ypFinishTotal / data.ypFinishQty : 0;
+        }
+
+        // 填充材料费用分配表
+        function fillMaterialDistributionTable(data) {
+            const body = document.getElementById('matDistBody');
+            body.innerHTML = `
+                <tr class="bg-gray-50 animate-fadeIn">
+                    <td class="px-4 py-3">甲产品</td>
+                    <td class="px-4 py-3 text-right">${formatNumber(data.jpMatDirect)}</td>
+                    <td class="px-4 py-3 text-right">${formatNumber(data.jpMatQuotaTotal)}</td>
+                    <td class="px-4 py-3 text-right">${data.matDistRate.toFixed(2)}</td>
+                    <td class="px-4 py-3 text-right">${formatNumber(data.jpMatCommon)}</td>
+                    <td class="px-4 py-3 text-right font-medium">${formatNumber(data.jpMatTotal)}</td>
+                </tr>
+                <tr class="animate-fadeIn">
+                    <td class="px-4 py-3">乙产品</td>
+                    <td class="px-4 py-3 text-right">${formatNumber(data.ypMatDirect)}</td>
+                    <td class="px-4 py-3 text-right">${formatNumber(data.ypMatQuotaTotal)}</td>
+                    <td class="px-4 py-3 text-right">${data.matDistRate.toFixed(2)}</td>
+                    <td class="px-4 py-3 text-right">${formatNumber(data.ypMatCommon)}</td>
+                    <td class="px-4 py-3 text-right font-medium">${formatNumber(data.ypMatTotal)}</td>
+                </tr>
+                <tr class="bg-gray-50 animate-fadeIn">
+                    <td class="px-4 py-3 font-medium">小计</td>
+                    <td class="px-4 py-3 text-right">${formatNumber(data.jpMatDirect + data.ypMatDirect)}</td>
+                    <td class="px-4 py-3 text-right">${formatNumber(data.jpMatQuotaTotal + data.ypMatQuotaTotal)}</td>
+                    <td class="px-4 py-3 text-right">-</td>
+                    <td class="px-4 py-3 text-right">${formatNumber(data.matCommon)}</td>
+                    <td class="px-4 py-3 text-right font-medium">${formatNumber(data.jpMatTotal + data.ypMatTotal)}</td>
+                </tr>
+                <tr class="animate-fadeIn">
+                    <td class="px-4 py-3">供电车间</td>
+                    <td class="px-4 py-3 text-right">${formatNumber(data.powerMat)}</td>
+                    <td class="px-4 py-3 text-right">-</td>
+                    <td class="px-4 py-3 text-right">-</td>
+                    <td class="px-4 py-3 text-right">-</td>
+                    <td class="px-4 py-3 text-right">${formatNumber(data.powerMat)}</td>
+                </tr>
+                <tr class="bg-gray-50 animate-fadeIn">
+                    <td class="px-4 py-3">供水车间</td>
+                    <td class="px-4 py-3 text-right">${formatNumber(data.waterMat)}</td>
+                    <td class="px-4 py-3 text-right">-</td>
+                    <td class="px-4 py-3 text-right">-</td>
+                    <td class="px-4 py-3 text-right">-</td>
+                    <td class="px-4 py-3 text-right">${formatNumber(data.waterMat)}</td>
+                </tr>
+                <tr class="animate-fadeIn">
+                    <td class="px-4 py-3">基本生产车间</td>
+                    <td class="px-4 py-3 text-right">${formatNumber(data.workshopMat)}</td>
+                    <td class="px-4 py-3 text-right">-</td>
+                    <td class="px-4 py-3 text-right">-</td>
+                    <td class="px-4 py-3 text-right">-</td>
+                    <td class="px-4 py-3 text-right">${formatNumber(data.workshopMat)}</td>
+                </tr>
+                <tr class="bg-gray-50 animate-fadeIn">
+                    <td class="px-4 py-3">管理费用</td>
+                    <td class="px-4 py-3 text-right">${formatNumber(data.adminMat)}</td>
+                    <td class="px-4 py-3 text-right">-</td>
+                    <td class="px-4 py-3 text-right">-</td>
+                    <td class="px-4 py-3 text-right">-</td>
+                    <td class="px-4 py-3 text-right">${formatNumber(data.adminMat)}</td>
+                </tr>
+                <tr class="bg-primary/10 animate-fadeIn">
+                    <td class="px-4 py-3 font-bold">合计</td>
+                    <td class="px-4 py-3 text-right font-bold">${formatNumber(data.jpMatDirect + data.ypMatDirect + data.powerMat + data.waterMat + data.workshopMat + data.adminMat)}</td>
+                    <td class="px-4 py-3 text-right font-bold">-</td>
+                    <td class="px-4 py-3 text-right font-bold">-</td>
+                    <td class="px-4 py-3 text-right font-bold">${formatNumber(data.matCommon)}</td>
+                    <td class="px-4 py-3 text-right font-bold">${formatNumber(data.jpMatTotal + data.ypMatTotal + data.powerMat + data.waterMat + data.workshopMat + data.adminMat)}</td>
+                </tr>
+            `;
+        }
+
+        // 填充职工薪酬分配表
+        function fillSalaryDistributionTable(data) {
+            const body = document.getElementById('salDistBody');
+            body.innerHTML = `
+                <tr class="bg-gray-50 animate-fadeIn">
+                    <td class="border px-3 py-2">甲产品</td>
+                    <td class="border px-3 py-2 text-right">${formatNumber(data.jpWorkHour)}</td>
+                    <td class="border px-3 py-2 text-right">${data.salDistRate.toFixed(2)}</td>
+                    <td class="border px-3 py-2 text-right">${formatNumber(data.jpSal)}</td>
+                    <td class="border px-3 py-2 text-right font-medium">${formatNumber(data.jpSal)}</td>
+                </tr>
+                <tr class="animate-fadeIn">
+                    <td class="border px-3 py-2">乙产品</td>
+                    <td class="border px-3 py-2 text-right">${formatNumber(data.ypWorkHour)}</td>
+                    <td class="border px-3 py-2 text-right">${data.salDistRate.toFixed(2)}</td>
+                    <td class="border px-3 py-2 text-right">${formatNumber(data.ypSal)}</td>
+                    <td class="border px-3 py-2 text-right font-medium">${formatNumber(data.ypSal)}</td>
+                </tr>
+                <tr class="bg-gray-50 animate-fadeIn">
+                    <td class="border px-3 py-2 font-medium">小计</td>
+                    <td class="border px-3 py-2 text-right">${formatNumber(data.totalWorkHour)}</td>
+                    <td class="border px-3 py-2 text-right">-</td>
+                    <td class="border px-3 py-2 text-right">${formatNumber(data.prodWorkerSal)}</td>
+                    <td class="border px-3 py-2 text-right font-medium">${formatNumber(data.prodWorkerSal)}</td>
+                </tr>
+                <tr class="animate-fadeIn">
+                    <td class="border px-3 py-2">供电车间</td>
+                    <td class="border px-3 py-2 text-right">-</td>
+                    <td class="border px-3 py-2 text-right">-</td>
+                    <td class="border px-3 py-2 text-right">${formatNumber(data.powerSal)}</td>
+                    <td class="border px-3 py-2 text-right">${formatNumber(data.powerSal)}</td>
+                </tr>
+                <tr class="bg-gray-50 animate-fadeIn">
+                    <td class="border px-3 py-2">供水车间</td>
+                    <td class="border px-3 py-2 text-right">-</td>
+                    <td class="border px-3 py-2 text-right">-</td>
+                    <td class="border px-3 py-2 text-right">${formatNumber(data.waterSal)}</td>
+                    <td class="border px-3 py-2 text-right">${formatNumber(data.waterSal)}</td>
+                </tr>
+                <tr class="animate-fadeIn">
+                    <td class="border px-3 py-2">基本生产车间</td>
+                    <td class="border px-3 py-2 text-right">-</td>
+                    <td class="border px-3 py-2 text-right">-</td>
+                    <td class="border px-3 py-2 text-right">${formatNumber(data.workshopStaffSal)}</td>
+                    <td class="border px-3 py-2 text-right">${formatNumber(data.workshopStaffSal)}</td>
+                </tr>
+                <tr class="bg-gray-50 animate-fadeIn">
+                    <td class="border px-3 py-2">管理费用</td>
+                    <td class="border px-3 py-2 text-right">-</td>
+                    <td class="border px-3 py-2 text-right">-</td>
+                    <td class="border px-3 py-2 text-right">${formatNumber(data.adminSal)}</td>
+                    <td class="border px-3 py-2 text-right">${formatNumber(data.adminSal)}</td>
+                </tr>
+                <tr class="bg-primary/10 animate-fadeIn">
+                    <td class="border px-3 py-2 font-bold">合计</td>
+                    <td class="border px-3 py-2 text-right font-bold">-</td>
+                    <td class="border px-3 py-2 text-right font-bold">-</td>
+                    <td class="border px-3 py-2 text-right font-bold">${formatNumber(data.prodWorkerSal + data.powerSal + data.waterSal + data.workshopStaffSal + data.adminSal)}</td>
+                    <td class="border px-3 py-2 text-right font-bold">${formatNumber(data.prodWorkerSal + data.powerSal + data.waterSal + data.workshopStaffSal + data.adminSal)}</td>
+                </tr>
+            `;
+        }
+
+        // 填充辅助生产成本明细账
+        function fillAuxiliaryCostTable(data) {
+            // 供电车间
+            const powerBody = document.getElementById('powerCostBody');
+            powerBody.innerHTML = `
+                <tr class="animate-fadeIn">
+                    <td class="border px-3 py-2">分配材料费用</td>
+                    <td class="border px-3 py-2 text-right">${formatNumber(data.powerMat)}</td>
+                    <td class="border px-3 py-2 text-right">-</td>
+                    <td class="border px-3 py-2 text-right">-</td>
+                    <td class="border px-3 py-2 text-right">-</td>
+                    <td class="border px-3 py-2 text-right">${formatNumber(data.powerMat)}</td>
+                </tr>
+                <tr class="bg-gray-50 animate-fadeIn">
+                    <td class="border px-3 py-2">分配职工薪酬</td>
+                    <td class="border px-3 py-2 text-right">-</td>
+                    <td class="border px-3 py-2 text-right">${formatNumber(data.powerSal)}</td>
+                    <td class="border px-3 py-2 text-right">-</td>
+                    <td class="border px-3 py-2 text-right">-</td>
+                    <td class="border px-3 py-2 text-right">${formatNumber(data.powerSal)}</td>
+                </tr>
+                <tr class="animate-fadeIn">
+                    <td class="border px-3 py-2">分配折旧费用</td>
+                    <td class="border px-3 py-2 text-right">-</td>
+                    <td class="border px-3 py-2 text-right">-</td>
+                    <td class="border px-3 py-2 text-right">${formatNumber(data.powerDepr)}</td>
+                    <td class="border px-3 py-2 text-right">-</td>
+                    <td class="border px-3 py-2 text-right">${formatNumber(data.powerDepr)}</td>
+                </tr>
+                <tr class="bg-gray-50 animate-fadeIn">
+                    <td class="border px-3 py-2">分配其他费用</td>
+                    <td class="border px-3 py-2 text-right">-</td>
+                    <td class="border px-3 py-2 text-right">-</td>
+                    <td class="border px-3 py-2 text-right">-</td>
+                    <td class="border px-3 py-2 text-right">${formatNumber(data.powerOther)}</td>
+                    <td class="border px-3 py-2 text-right">${formatNumber(data.powerOther)}</td>
+                </tr>
+                <tr class="bg-primary/10 animate-fadeIn">
+                    <td class="border px-3 py-2 font-medium">本期发生额合计</td>
+                    <td class="border px-3 py-2 text-right font-medium">${formatNumber(data.powerMat)}</td>
+                    <td class="border px-3 py-2 text-right font-medium">${formatNumber(data.powerSal)}</td>
+                    <td class="border px-3 py-2 text-right font-medium">${formatNumber(data.powerDepr)}</td>
+                    <td class="border px-3 py-2 text-right font-medium">${formatNumber(data.powerOther)}</td>
+                    <td class="border px-3 py-2 text-right font-bold">${formatNumber(data.powerTotalCost)}</td>
+                </tr>
+                <tr class="animate-fadeIn">
+                    <td class="border px-3 py-2 font-medium">分配转出</td>
+                    <td class="border px-3 py-2 text-right font-medium">-${formatNumber(data.powerMat)}</td>
+                    <td class="border px-3 py-2 text-right font-medium">-${formatNumber(data.powerSal)}</td>
+                    <td class="border px-3 py-2 text-right font-medium">-${formatNumber(data.powerDepr)}</td>
+                    <td class="border px-3 py-2 text-right font-medium">-${formatNumber(data.powerOther)}</td>
+                    <td class="border px-3 py-2 text-right font-bold">-${formatNumber(data.powerTotalCost)}</td>
+                </tr>
+            `;
+
+            // 供水车间
+            const waterBody = document.getElementById('waterCostBody');
+            waterBody.innerHTML = `
+                <tr class="animate-fadeIn">
+                    <td class="border px-3 py-2">分配材料费用</td>
+                    <td class="border px-3 py-2 text-right">${formatNumber(data.waterMat)}</td>
+                    <td class="border px-3 py-2 text-right">-</td>
+                    <td class="border px-3 py-2 text-right">-</td>
+                    <td class="border px-3 py-2 text-right">-</td>
+                    <td class="border px-3 py-2 text-right">${formatNumber(data.waterMat)}</td>
+                </tr>
+                <tr class="bg-gray-50 animate-fadeIn">
+                    <td class="border px-3 py-2">分配职工薪酬</td>
+                    <td class="border px-3 py-2 text-right">-</td>
+                    <td class="border px-3 py-2 text-right">${formatNumber(data.waterSal)}</td>
+                    <td class="border px-3 py-2 text-right">-</td>
+                    <td class="border px-3 py-2 text-right">-</td>
+                    <td class="border px-3 py-2 text-right">${formatNumber(data.waterSal)}</td>
+                </tr>
+                <tr class="animate-fadeIn">
+                    <td class="border px-3 py-2">分配折旧费用</td>
+                    <td class="border px-3 py-2 text-right">-</td>
+                    <td class="border px-3 py-2 text-right">-</td>
+                    <td class="border px-3 py-2 text-right">${formatNumber(data.waterDepr)}</td>
+                    <td class="border px-3 py-2 text-right">-</td>
+                    <td class="border px-3 py-2 text-right">${formatNumber(data.waterDepr)}</td>
+                </tr>
+                <tr class="bg-gray-50 animate-fadeIn">
+                    <td class="border px-3 py-2">分配其他费用</td>
+                    <td class="border px-3 py-2 text-right">-</td>
+                    <td class="border px-3 py-2 text-right">-</td>
+                    <td class="border px-3 py-2 text-right">-</td>
+                    <td class="border px-3 py-2 text-right">${formatNumber(data.waterOther)}</td>
+                    <td class="border px-3 py-2 text-right">${formatNumber(data.waterOther)}</td>
+                </tr>
+                <tr class="bg-primary/10 animate-fadeIn">
+                    <td class="border px-3 py-2 font-medium">本期发生额合计</td>
+                    <td class="border px-3 py-2 text-right font-medium">${formatNumber(data.waterMat)}</td>
+                    <td class="border px-3 py-2 text-right font-medium">${formatNumber(data.waterSal)}</td>
+                    <td class="border px-3 py-2 text-right font-medium">${formatNumber(data.waterDepr)}</td>
+                    <td class="border px-3 py-2 text-right font-medium">${formatNumber(data.waterOther)}</td>
+                    <td class="border px-3 py-2 text-right font-bold">${formatNumber(data.waterTotalCost)}</td>
+                </tr>
+                <tr class="animate-fadeIn">
+                    <td class="border px-3 py-2 font-medium">分配转出</td>
+                    <td class="border px-3 py-2 text-right font-medium">-${formatNumber(data.waterMat)}</td>
+                    <td class="border px-3 py-2 text-right font-medium">-${formatNumber(data.waterSal)}</td>
+                    <td class="border px-3 py-2 text-right font-medium">-${formatNumber(data.waterDepr)}</td>
+                    <td class="border px-3 py-2 text-right font-medium">-${formatNumber(data.waterOther)}</td>
+                    <td class="border px-3 py-2 text-right font-bold">-${formatNumber(data.waterTotalCost)}</td>
+                </tr>
+            `;
+        }
+
+        // 填充辅助生产费用分配表
+        function fillAuxiliaryDistributionTable(data) {
+            const body = document.getElementById('auxDistBody');
+            body.innerHTML = `
+                <tr class="bg-gray-50 animate-fadeIn">
+                    <td class="border px-3 py-2 font-medium">待分配费用</td>
+                    <td class="border px-3 py-2 text-right">-</td>
+                    <td class="border px-3 py-2 text-right">${formatNumber(data.powerTotalCost)}</td>
+                    <td class="border px-3 py-2 text-right">-</td>
+                    <td class="border px-3 py-2 text-right">${formatNumber(data.waterTotalCost)}</td>
+                    <td class="border px-3 py-2 text-right font-medium">${formatNumber(data.powerTotalCost + data.waterTotalCost)}</td>
+                </tr>
+                <tr class="animate-fadeIn">
+                    <td class="border px-3 py-2 font-medium">劳务供应量</td>
+                    <td class="border px-3 py-2 text-right">${formatNumber(data.powerSupply - 1000)}</td>
+                    <td class="border px-3 py-2 text-right">-</td>
+                    <td class="border px-3 py-2 text-right">${formatNumber(data.waterSupply - 800)}</td>
+                    <td class="border px-3 py-2 text-right">-</td>
+                    <td class="border px-3 py-2 text-right">-</td>
+                </tr>
+                <tr class="bg-gray-50 animate-fadeIn">
+                    <td class="border px-3 py-2 font-medium">分配率</td>
+                    <td class="border px-3 py-2 text-right">-</td>
+                    <td class="border px-3 py-2 text-right">${data.powerDistRate.toFixed(4)}</td>
+                    <td class="border px-3 py-2 text-right">-</td>
+                    <td class="border px-3 py-2 text-right">${data.waterDistRate.toFixed(4)}</td>
+                    <td class="border px-3 py-2 text-right">-</td>
+                </tr>
+                <tr class="animate-fadeIn">
+                    <td class="border px-3 py-2 font-medium">甲产品</td>
+                    <td class="border px-3 py-2 text-right">${formatNumber(data.jpPowerUse)}</td>
+                    <td class="border px-3 py-2 text-right">${formatNumber(data.jpPowerCost)}</td>
+                    <td class="border px-3 py-2 text-right">${formatNumber(data.jpWaterUse)}</td>
+                    <td class="border px-3 py-2 text-right">${formatNumber(data.jpWaterCost)}</td>
+                    <td class="border px-3 py-2 text-right font-medium">${formatNumber(data.jpAuxTotal)}</td>
+                </tr>
+                <tr class="bg-gray-50 animate-fadeIn">
+                    <td class="border px-3 py-2 font-medium">乙产品</td>
+                    <td class="border px-3 py-2 text-right">${formatNumber(data.ypPowerUse)}</td>
+                    <td class="border px-3 py-2 text-right">${formatNumber(data.ypPowerCost)}</td>
+                    <td class="border px-3 py-2 text-right">${formatNumber(data.ypWaterUse)}</td>
+                    <td class="border px-3 py-2 text-right">${formatNumber(data.ypWaterCost)}</td>
+                    <td class="border px-3 py-2 text-right font-medium">${formatNumber(data.ypAuxTotal)}</td>
+                </tr>
+                <tr class="animate-fadeIn">
+                    <td class="border px-3 py-2 font-medium">小计</td>
+                    <td class="border px-3 py-2 text-right">${formatNumber(data.jpPowerUse + data.ypPowerUse)}</td>
+                    <td class="border px-3 py-2 text-right">${formatNumber(data.jpPowerCost + data.ypPowerCost)}</td>
+                    <td class="border px-3 py-2 text-right">${formatNumber(data.jpWaterUse + data.ypWaterUse)}</td>
+                    <td class="border px-3 py-2 text-right">${formatNumber(data.jpWaterCost + data.ypWaterCost)}</td>
+                    <td class="border px-3 py-2 text-right font-medium">${formatNumber(data.jpAuxTotal + data.ypAuxTotal)}</td>
+                </tr>
+                <tr class="bg-gray-50 animate-fadeIn">
+                    <td class="border px-3 py-2 font-medium">基本生产车间</td>
+                    <td class="border px-3 py-2 text-right">2300</td>
+                    <td class="border px-3 py-2 text-right">${formatNumber(data.workshopPowerCost)}</td>
+                    <td class="border px-3 py-2 text-right">3900</td>
+                    <td class="border px-3 py-2 text-right">${formatNumber(data.workshopWaterCost)}</td>
+                    <td class="border px-3 py-2 text-right font-medium">${formatNumber(data.workshopPowerCost + data.workshopWaterCost)}</td>
+                </tr>
+                <tr class="animate-fadeIn">
+                    <td class="border px-3 py-2 font-medium">管理部门</td>
+                    <td class="border px-3 py-2 text-right">1200</td>
+                    <td class="border px-3 py-2 text-right">${formatNumber(data.adminPowerCost)}</td>
+                    <td class="border px-3 py-2 text-right">2800</td>
+                    <td class="border px-3 py-2 text-right">${formatNumber(data.adminWaterCost)}</td>
+                    <td class="border px-3 py-2 text-right font-medium">${formatNumber(data.adminPowerCost + data.adminWaterCost)}</td>
+                </tr>
+                <tr class="bg-primary/10 animate-fadeIn">
+                    <td class="border px-3 py-2 font-bold">合计</td>
+                    <td class="border px-3 py-2 text-right font-bold">${formatNumber(data.powerSupply - 1000)}</td>
+                    <td class="border px-3 py-2 text-right font-bold">${formatNumber(data.powerTotalCost)}</td>
+                    <td class="border px-3 py-2 text-right font-bold">${formatNumber(data.waterSupply - 800)}</td>
+                    <td class="border px-3 py-2 text-right font-bold">${formatNumber(data.waterTotalCost)}</td>
+                    <td class="border px-3 py-2 text-right font-bold">${formatNumber(data.powerTotalCost + data.waterTotalCost)}</td>
+                </tr>
+            `;
+        }
+
+        // 填充制造费用明细账
+        function fillManufacturingCostTable(data) {
+            const body = document.getElementById('mfgCostBody');
+            body.innerHTML = `
+                <tr class="animate-fadeIn">
+                    <td class="border px-3 py-2">分配材料费用</td>
+                    <td class="border px-3 py-2 text-right">${formatNumber(data.mfgMaterial)}</td>
+                    <td class="border px-3 py-2 text-right">-</td>
+                    <td class="border px-3 py-2 text-right">-</td>
+                    <td class="border px-3 py-2 text-right">-</td>
+                    <td class="border px-3 py-2 text-right">-</td>
+                    <td class="border px-3 py-2 text-right">${formatNumber(data.mfgMaterial)}</td>
+                </tr>
+                <tr class="bg-gray-50 animate-fadeIn">
+                    <td class="border px-3 py-2">分配职工薪酬</td>
+                    <td class="border px-3 py-2 text-right">-</td>
+                    <td class="border px-3 py-2 text-right">${formatNumber(data.mfgSal)}</td>
+                    <td class="border px-3 py-2 text-right">-</td>
+                    <td class="border px-3 py-2 text-right">-</td>
+                    <td class="border px-3 py-2 text-right">-</td>
+                    <td class="border px-3 py-2 text-right">${formatNumber(data.mfgSal)}</td>
+                </tr>
+                <tr class="animate-fadeIn">
+                    <td class="border px-3 py-2">分配折旧费用</td>
+                    <td class="border px-3 py-2 text-right">-</td>
+                    <td class="border px-3 py-2 text-right">-</td>
+                    <td class="border px-3 py-2 text-right">${formatNumber(data.mfgDepr)}</td>
+                    <td class="border px-3 py-2 text-right">-</td>
+                    <td class="border px-3 py-2 text-right">-</td>
+                    <td class="border px-3 py-2 text-right">${formatNumber(data.mfgDepr)}</td>
+                </tr>
+                <tr class="bg-gray-50 animate-fadeIn">
+                    <td class="border px-3 py-2">分配其他费用</td>
+                    <td class="border px-3 py-2 text-right">-</td>
+                    <td class="border px-3 py-2 text-right">-</td>
+                    <td class="border px-3 py-2 text-right">-</td>
+                    <td class="border px-3 py-2 text-right">${formatNumber(data.mfgOther)}</td>
+                    <td class="border px-3 py-2 text-right">-</td>
+                    <td class="border px-3 py-2 text-right">${formatNumber(data.mfgOther)}</td>
+                </tr>
+                <tr class="animate-fadeIn">
+                    <td class="border px-3 py-2">分配辅助生产费用</td>
+                    <td class="border px-3 py-2 text-right">-</td>
+                    <td class="border px-3 py-2 text-right">-</td>
+                    <td class="border px-3 py-2 text-right">-</td>
+                    <td class="border px-3 py-2 text-right">-</td>
+                    <td class="border px-3 py-2 text-right">${formatNumber(data.mfgAux)}</td>
+                    <td class="border px-3 py-2 text-right">${formatNumber(data.mfgAux)}</td>
+                </tr>
+                <tr class="bg-primary/10 animate-fadeIn">
+                    <td class="border px-3 py-2 font-medium">待分配费用合计</td>
+                    <td class="border px-3 py-2 text-right font-medium">${formatNumber(data.mfgMaterial)}</td>
+                    <td class="border px-3 py-2 text-right font-medium">${formatNumber(data.mfgSal)}</td>
+                    <td class="border px-3 py-2 text-right font-medium">${formatNumber(data.mfgDepr)}</td>
+                    <td class="border px-3 py-2 text-right font-medium">${formatNumber(data.mfgOther)}</td>
+                    <td class="border px-3 py-2 text-right font-medium">${formatNumber(data.mfgAux)}</td>
+                    <td class="border px-3 py-2 text-right font-bold">${formatNumber(data.mfgTotal)}</td>
+                </tr>
+                <tr class="animate-fadeIn">
+                    <td class="border px-3 py-2 font-medium">分配转出</td>
+                    <td class="border px-3 py-2 text-right font-medium">-${formatNumber(data.mfgMaterial)}</td>
+                    <td class="border px-3 py-2 text-right font-medium">-${formatNumber(data.mfgSal)}</td>
+                    <td class="border px-3 py-2 text-right font-medium">-${formatNumber(data.mfgDepr)}</td>
+                    <td class="border px-3 py-2 text-right font-medium">-${formatNumber(data.mfgOther)}</td>
+                    <td class="border px-3 py-2 text-right font-medium">-${formatNumber(data.mfgAux)}</td>
+                    <td class="border px-3 py-2 text-right font-bold">-${formatNumber(data.mfgTotal)}</td>
+                </tr>
+            `;
+        }
+
+        // 填充制造费用分配表
+        function fillManufacturingDistributionTable(data) {
+            const body = document.getElementById('mfgDistBody');
+            body.innerHTML = `
+                <tr class="bg-gray-50 animate-fadeIn">
+                    <td class="border px-3 py-2">甲产品</td>
+                    <td class="border px-3 py-2 text-right">${formatNumber(data.jpWorkHour)}</td>
+                    <td class="border px-3 py-2 text-right">${data.mfgDistRate.toFixed(2)}</td>
+                    <td class="border px-3 py-2 text-right font-medium">${formatNumber(data.jpMfg)}</td>
+                </tr>
+                <tr class="animate-fadeIn">
+                    <td class="border px-3 py-2">乙产品</td>
+                    <td class="border px-3 py-2 text-right">${formatNumber(data.ypWorkHour)}</td>
+                    <td class="border px-3 py-2 text-right">${data.mfgDistRate.toFixed(2)}</td>
+                    <td class="border px-3 py-2 text-right font-medium">${formatNumber(data.ypMfg)}</td>
+                </tr>
+                <tr class="bg-primary/10 animate-fadeIn">
+                    <td class="border px-3 py-2 font-bold">合计</td>
+                    <td class="border px-3 py-2 text-right font-bold">${formatNumber(data.totalWorkHour)}</td>
+                    <td class="border px-3 py-2 text-right font-bold">-</td>
+                    <td class="border px-3 py-2 text-right font-bold">${formatNumber(data.mfgTotal)}</td>
+                </tr>
+            `;
+        }
+
+        // 填充产品成本计算单
+        function fillProductCostTable(data) {
+            // 甲产品
+            const jpBody = document.getElementById('jpCostBody');
+            jpBody.innerHTML = `
+                <tr class="animate-fadeIn">
+                    <td class="border px-3 py-2">月初在产品成本</td>
+                    <td class="border px-3 py-2 text-right">${formatNumber(data.jpBeginMat)}</td>
+                    <td class="border px-3 py-2 text-right">${formatNumber(data.jpBeginLab)}</td>
+                    <td class="border px-3 py-2 text-right">${formatNumber(data.jpBeginMfg)}</td>
+                    <td class="border px-3 py-2 text-right">${formatNumber(data.jpBeginMat + data.jpBeginLab + data.jpBeginMfg)}</td>
+                </tr>
+                <tr class="bg-gray-50 animate-fadeIn">
+                    <td class="border px-3 py-2">本月生产费用</td>
+                    <td class="border px-3 py-2 text-right">${formatNumber(data.jpMatTotal)}</td>
+                    <td class="border px-3 py-2 text-right">${formatNumber(data.jpSal + data.jpAuxTotal)}</td>
+                    <td class="border px-3 py-2 text-right">${formatNumber(data.jpMfg)}</td>
+                    <td class="border px-3 py-2 text-right">${formatNumber(data.jpMatTotal + data.jpSal + data.jpAuxTotal + data.jpMfg)}</td>
+                </tr>
+                <tr class="animate-fadeIn">
+                    <td class="border px-3 py-2">生产费用合计</td>
+                    <td class="border px-3 py-2 text-right">${formatNumber(data.jpMatBeginTotal)}</td>
+                    <td class="border px-3 py-2 text-right">${formatNumber(data.jpLabBeginTotal)}</td>
+                    <td class="border px-3 py-2 text-right">${formatNumber(data.jpMfgBeginTotal)}</td>
+                    <td class="border px-3 py-2 text-right font-medium">${formatNumber(data.jpMatBeginTotal + data.jpLabBeginTotal + data.jpMfgBeginTotal)}</td>
+                </tr>
+                <tr class="bg-gray-50 animate-fadeIn">
+                    <td class="border px-3 py-2">完工产品数量</td>
+                    <td class="border px-3 py-2 text-right">${formatNumber(data.jpFinishQty)}</td>
+                    <td class="border px-3 py-2 text-right">${formatNumber(data.jpFinishQty)}</td>
+                    <td class="border px-3 py-2 text-right">${formatNumber(data.jpFinishQty)}</td>
+                    <td class="border px-3 py-2 text-right">-</td>
+                </tr>
+                <tr class="animate-fadeIn">
+                    <td class="border px-3 py-2">在产品约当产量</td>
+                    <td class="border px-3 py-2 text-right">${formatNumber(data.jpEndQty)}</td>
+                    <td class="border px-3 py-2 text-right">${formatNumber(data.jpProcessEquivQty - data.jpFinishQty)}</td>
+                    <td class="border px-3 py-2 text-right">${formatNumber(data.jpProcessEquivQty - data.jpFinishQty)}</td>
+                    <td class="border px-3 py-2 text-right">-</td>
+                </tr>
+                <tr class="bg-gray-50 animate-fadeIn">
+                    <td class="border px-3 py-2">总约当产量</td>
+                    <td class="border px-3 py-2 text-right">${formatNumber(data.jpMatEquivQty)}</td>
+                    <td class="border px-3 py-2 text-right">${formatNumber(data.jpProcessEquivQty)}</td>
+                    <td class="border px-3 py-2 text-right">${formatNumber(data.jpProcessEquivQty)}</td>
+                    <td class="border px-3 py-2 text-right">-</td>
+                </tr>
+                <tr class="animate-fadeIn">
+                    <td class="border px-3 py-2">单位成本</td>
+                    <td class="border px-3 py-2 text-right">${data.jpMatUnitCost.toFixed(2)}</td>
+                    <td class="border px-3 py-2 text-right">${data.jpLabUnitCost.toFixed(2)}</td>
+                    <td class="border px-3 py-2 text-right">${data.jpMfgUnitCost.toFixed(2)}</td>
+                    <td class="border px-3 py-2 text-right font-medium">${(data.jpMatUnitCost + data.jpLabUnitCost + data.jpMfgUnitCost).toFixed(2)}</td>
+                </tr>
+                <tr class="bg-gray-50 animate-fadeIn">
+                    <td class="border px-3 py-2">完工产品总成本</td>
+                    <td class="border px-3 py-2 text-right">${formatNumber(data.jpMatFinish)}</td>
+                    <td class="border px-3 py-2 text-right">${formatNumber(data.jpLabFinish)}</td>
+                    <td class="border px-3 py-2 text-right">${formatNumber(data.jpMfgFinish)}</td>
+                    <td class="border px-3 py-2 text-right font-bold">${formatNumber(data.jpFinishTotal)}</td>
+                </tr>
+                <tr class="animate-fadeIn">
+                    <td class="border px-3 py-2">月末在产品成本</td>
+                    <td class="border px-3 py-2 text-right">${formatNumber(data.jpMatEnd)}</td>
+                    <td class="border px-3 py-2 text-right">${formatNumber(data.jpLabEnd)}</td>
+                    <td class="border px-3 py-2 text-right">${formatNumber(data.jpMfgEnd)}</td>
+                    <td class="border px-3 py-2 text-right font-medium">${formatNumber(data.jpEndTotal)}</td>
+                </tr>
+            `;
+
+            // 乙产品
+            const ypBody = document.getElementById('ypCostBody');
+            ypBody.innerHTML = `
+                <tr class="animate-fadeIn">
+                    <td class="border px-3 py-2">月初在产品成本</td>
+                    <td class="border px-3 py-2 text-right">-</td>
+                    <td class="border px-3 py-2 text-right">-</td>
+                    <td class="border px-3 py-2 text-right">-</td>
+                    <td class="border px-3 py-2 text-right">-</td>
+                </tr>
+                <tr class="bg-gray-50 animate-fadeIn">
+                    <td class="border px-3 py-2">本月生产费用</td>
+                    <td class="border px-3 py-2 text-right">${formatNumber(data.ypMatTotal)}</td>
+                    <td class="border px-3 py-2 text-right">${formatNumber(data.ypSal + data.ypAuxTotal)}</td>
+                    <td class="border px-3 py-2 text-right">${formatNumber(data.ypMfg)}</td>
+                    <td class="border px-3 py-2 text-right">${formatNumber(data.ypMatTotal + data.ypSal + data.ypAuxTotal + data.ypMfg)}</td>
+                </tr>
+                <tr class="animate-fadeIn">
+                    <td class="border px-3 py-2">生产费用合计</td>
+                    <td class="border px-3 py-2 text-right">${formatNumber(data.ypMatTotal)}</td>
+                    <td class="border px-3 py-2 text-right">${formatNumber(data.ypSal + data.ypAuxTotal)}</td>
+                    <td class="border px-3 py-2 text-right">${formatNumber(data.ypMfg)}</td>
+                    <td class="border px-3 py-2 text-right font-medium">${formatNumber(data.ypMatTotal + data.ypSal + data.ypAuxTotal + data.ypMfg)}</td>
+                </tr>
+                <tr class="bg-gray-50 animate-fadeIn">
+                    <td class="border px-3 py-2">完工产品数量</td>
+                    <td class="border px-3 py-2 text-right">${formatNumber(data.ypFinishQty)}</td>
+                    <td class="border px-3 py-2 text-right">${formatNumber(data.ypFinishQty)}</td>
+                    <td class="border px-3 py-2 text-right">${formatNumber(data.ypFinishQty)}</td>
+                    <td class="border px-3 py-2 text-right">-</td>
+                </tr>
+                <tr class="animate-fadeIn">
+                    <td class="border px-3 py-2">在产品数量</td>
+                    <td class="border px-3 py-2 text-right">-</td>
+                    <td class="border px-3 py-2 text-right">-</td>
+                    <td class="border px-3 py-2 text-right">-</td>
+                    <td class="border px-3 py-2 text-right">-</td>
+                </tr>
+                <tr class="bg-gray-50 animate-fadeIn">
+                    <td class="border px-3 py-2">单位成本</td>
+                    <td class="border px-3 py-2 text-right">${(data.ypMatFinish / data.ypFinishQty).toFixed(2)}</td>
+                    <td class="border px-3 py-2 text-right">${(data.ypLabFinish / data.ypFinishQty).toFixed(2)}</td>
+                    <td class="border px-3 py-2 text-right">${(data.ypMfgFinish / data.ypFinishQty).toFixed(2)}</td>
+                    <td class="border px-3 py-2 text-right font-medium">${data.ypUnitCost.toFixed(2)}</td>
+                </tr>
+                <tr class="animate-fadeIn">
+                    <td class="border px-3 py-2">完工产品总成本</td>
+                    <td class="border px-3 py-2 text-right">${formatNumber(data.ypMatFinish)}</td>
+                    <td class="border px-3 py-2 text-right">${formatNumber(data.ypLabFinish)}</td>
+                    <td class="border px-3 py-2 text-right">${formatNumber(data.ypMfgFinish)}</td>
+                    <td class="border px-3 py-2 text-right font-bold">${formatNumber(data.ypFinishTotal)}</td>
+                </tr>
+                <tr class="bg-gray-50 animate-fadeIn">
+                    <td class="border px-3 py-2">月末在产品成本</td>
+                    <td class="border px-3 py-2 text-right">-</td>
+                    <td class="border px-3 py-2 text-right">-</td>
+                    <td class="border px-3 py-2 text-right">-</td>
+                    <td class="border px-3 py-2 text-right">-</td>
+                </tr>
+            `;
+        }
+
+        // 填充完工产品成本汇总表
+        function fillFinishCostTable(data) {
+            const body = document.getElementById('finishCostBody');
+            body.innerHTML = `
+                <tr class="bg-gray-50 animate-fadeIn">
+                    <td class="border px-3 py-2 font-medium">甲产品</td>
+                    <td class="border px-3 py-2 text-right">${formatNumber(data.jpFinishQty)}</td>
+                    <td class="border px-3 py-2 text-right">${formatNumber(data.jpMatFinish)}</td>
+                    <td class="border px-3 py-2 text-right">${formatNumber(data.jpLabFinish)}</td>
+                    <td class="border px-3 py-2 text-right">${formatNumber(data.jpMfgFinish)}</td>
+                    <td class="border px-3 py-2 text-right font-medium">${formatNumber(data.jpFinishTotal)}</td>
+                    <td class="border px-3 py-2 text-right">${data.jpUnitCost.toFixed(2)}</td>
+                </tr>
+                <tr class="animate-fadeIn">
+                    <td class="border px-3 py-2 font-medium">乙产品</td>
+                    <td class="border px-3 py-2 text-right">${formatNumber(data.ypFinishQty)}</td>
+                    <td class="border px-3 py-2 text-right">${formatNumber(data.ypMatFinish)}</td>
+                    <td class="border px-3 py-2 text-right">${formatNumber(data.ypLabFinish)}</td>
+                    <td class="border px-3 py-2 text-right">${formatNumber(data.ypMfgFinish)}</td>
+                    <td class="border px-3 py-2 text-right font-medium">${formatNumber(data.ypFinishTotal)}</td>
+                    <td class="border px-3 py-2 text-right">${data.ypUnitCost.toFixed(2)}</td>
+                </tr>
+                <tr class="bg-primary/10 animate-fadeIn">
+                    <td class="border px-3 py-2 font-bold">合计</td>
+                    <td class="border px-3 py-2 text-right font-bold">${formatNumber(data.jpFinishQty + data.ypFinishQty)}</td>
+                    <td class="border px-3 py-2 text-right font-bold">${formatNumber(data.jpMatFinish + data.ypMatFinish)}</td>
+                    <td class="border px-3 py-2 text-right font-bold">${formatNumber(data.jpLabFinish + data.ypLabFinish)}</td>
+                    <td class="border px-3 py-2 text-right font-bold">${formatNumber(data.jpMfgFinish + data.ypMfgFinish)}</td>
+                    <td class="border px-3 py-2 text-right font-bold">${formatNumber(data.jpFinishTotal + data.ypFinishTotal)}</td>
+                    <td class="border px-3 py-2 text-right">-</td>
+                </tr>
+            `;
+        }
+
+        // 导出到Excel
+        function exportToExcel() {
+            // 创建工作簿
+            const wb = XLSX.utils.book_new();
+            
+            // 更精确地获取当前激活的表格按钮
+            const activeTableTab = document.querySelector('.table-tab.bg-secondary.text-white');
+            if (activeTableTab) {
+                // 获取当前表格的ID和名称
+                const tableId = activeTableTab.getAttribute('data-table');
+                const tableName = activeTableTab.textContent;
+                
+                // 只添加当前选中的表格到工作簿
+                addTableToWorkbook(wb, tableName, tableId);
+                
+                // 更新文件名，包含当前表格名称
+                XLSX.writeFile(wb, tableName + '_' + new Date().toLocaleDateString() + '.xlsx');
+            } else {
+                // 如果没有选中的表格，默认导出所有表格
+                addTableToWorkbook(wb, '材料费用分配表', 'matDistTable');
+                addTableToWorkbook(wb, '职工薪酬分配表', 'salDistTable');
+                addTableToWorkbook(wb, '辅助生产成本明细账', 'auxCostTable');
+                addTableToWorkbook(wb, '辅助生产费用分配表', 'auxDistTable');
+                addTableToWorkbook(wb, '制造费用明细账', 'mfgCostTable');
+                addTableToWorkbook(wb, '制造费用分配表', 'mfgDistTable');
+                addTableToWorkbook(wb, '产品成本计算单', 'prodCostTable');
+                addTableToWorkbook(wb, '完工产品成本汇总表', 'finishCostTable');
+                
+                // 生成并下载Excel文件
+                XLSX.writeFile(wb, '成本会计核算表_' + new Date().toLocaleDateString() + '.xlsx');
+            }
+        }
+
+        // 将表格添加到工作簿
+        function addTableToWorkbook(wb, sheetName, tableId) {
+            const tableElement = document.getElementById(tableId);
+            if (!tableElement) return;
+            
+            // 找到所有表格元素
+            const tables = tableElement.querySelectorAll('table');
+            if (tables.length === 0) return;
+            
+            if (tables.length === 1) {
+                // 只有一个表格时，直接转换
+                const ws = XLSX.utils.table_to_sheet(tables[0]);
+                XLSX.utils.book_append_sheet(wb, ws, sheetName);
+            } else {
+                // 多个表格时，为每个表格创建单独的工作表
+                tables.forEach((table, index) => {
+                    // 获取表格标题
+                    const titleElement = table.previousElementSibling;
+                    let sheetTitle = sheetName;
+                    if (titleElement && titleElement.tagName === 'H3') {
+                        sheetTitle = titleElement.textContent;
+                    } else if (tables.length > 1) {
+                        sheetTitle = `${sheetName}(${index + 1})`;
+                    }
+                    
+                    const ws = XLSX.utils.table_to_sheet(table);
+                    XLSX.utils.book_append_sheet(wb, ws, sheetTitle);
+                });
+            }
+        }
+
+        // 格式化数字为千分位
+        function formatNumber(num) {
+            return num.toLocaleString('zh-CN');
+        }
+
+        // 显示通知
+        function showNotification(message, type = 'info') {
+            // 移除所有现有通知
+            const existingNotifications = document.querySelectorAll('.notification');
+            existingNotifications.forEach(notification => notification.remove());
+            
+            // 创建新通知容器
+            const notification = document.createElement('div');
+            notification.className = `notification fixed bottom-4 right-4 px-4 py-3 rounded-lg shadow-xl z-50 transition-all duration-300 transform translate-y-0 opacity-100 flex items-center gap-3`;
+            
+            // 根据类型设置不同的背景色
+            const typeClasses = {
+                'success': 'bg-green-500',
+                'error': 'bg-red-500',
+                'warning': 'bg-yellow-500',
+                'info': 'bg-blue-500'
+            };
+            notification.classList.add(typeClasses[type] || typeClasses['info']);
+            
+            // 创建图标元素
+            const icon = document.createElement('span');
+            icon.className = 'text-lg';
+            const iconMap = {
+                'success': '✓',
+                'error': '✗',
+                'warning': '⚠️',
+                'info': 'ℹ️'
+            };
+            icon.textContent = iconMap[type] || iconMap['info'];
+            
+            // 创建消息文本
+            const text = document.createElement('span');
+            text.className = 'text-white font-medium';
+            text.textContent = message;
+            
+            // 创建关闭按钮
+            const closeBtn = document.createElement('button');
+            closeBtn.className = 'ml-2 text-white hover:opacity-80 transition-opacity';
+            closeBtn.textContent = '×';
+            closeBtn.style.fontSize = '1.2rem';
+            closeBtn.style.fontWeight = 'bold';
+            closeBtn.style.background = 'none';
+            closeBtn.style.border = 'none';
+            closeBtn.style.cursor = 'pointer';
+            
+            // 添加关闭事件
+            closeBtn.addEventListener('click', () => {
+                notification.classList.add('opacity-0', 'translate-y-4');
+                setTimeout(() => {
+                    notification.remove();
+                }, 300);
+            });
+            
+            // 组合所有元素
+            notification.appendChild(icon);
+            notification.appendChild(text);
+            notification.appendChild(closeBtn);
+            
+            // 添加到页面
+            document.body.appendChild(notification);
+            
+            // 3秒后自动隐藏
+            setTimeout(() => {
+                if (notification.parentNode) {
+                    notification.classList.add('opacity-0', 'translate-y-4');
+                    setTimeout(() => {
+                        if (notification.parentNode) {
+                            notification.remove();
+                        }
+                    }, 300);
+                }
+            }, 3000);
+        }
+    </script>
+</body>
+</html>
